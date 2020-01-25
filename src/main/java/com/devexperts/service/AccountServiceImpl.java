@@ -2,36 +2,75 @@ package com.devexperts.service;
 
 import com.devexperts.account.Account;
 import com.devexperts.account.AccountKey;
+import com.devexperts.utils.TriConsumer;
+import lombok.EqualsAndHashCode;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-public class AccountServiceImpl implements AccountService {
+@RequiredArgsConstructor
+@EqualsAndHashCode
+public class AccountServiceImpl {
+    private final ConcurrentHashMap<AccountKey, Account> accounts = new ConcurrentHashMap<>();
+    private static final Object tieLock = new Object();
 
-    private final List<Account> accounts = new ArrayList<>();
-
-    @Override
     public void clear() {
         accounts.clear();
     }
 
-    @Override
     public void createAccount(Account account) {
-        accounts.add(account);
+        if (accounts.get(account.getAccountKey()) != null) {
+            throw new AccountAlreadyExistsException();
+        }
+        accounts.put(account.getAccountKey(), account);
     }
 
-    @Override
     public Account getAccount(long id) {
-        return accounts.stream()
-                .filter(account -> account.getAccountKey() == AccountKey.valueOf(id))
-                .findAny()
-                .orElse(null);
+        return accounts.get(AccountKey.valueOf(id));
     }
 
-    @Override
+    @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
     public void transfer(Account source, Account target, double amount) {
-        //do nothing for now
+
+        TriConsumer<Account, Account, Double> transfer = (src, trg, am) -> {
+            if (src.getBalance().compareTo(am) < 0)
+                throw new InsufficientAccountBalanceException();
+            else {
+                src.debit(am);
+                trg.credit(am);
+            }
+        };
+
+        int fromHash = source.hashCode();
+        int toHash = target.hashCode();
+        if (fromHash < toHash) {
+            synchronized (source) {
+                synchronized (target) {
+                    transfer.accept(source, target, amount);
+                }
+            }
+        } else if (fromHash > toHash) {
+            synchronized (target) {
+                synchronized (source) {
+                    transfer.accept(source, target, amount);
+                }
+            }
+        } else {
+            synchronized (tieLock) {
+                synchronized (source) {
+                    synchronized (target) {
+                        transfer.accept(source, target, amount);
+                    }
+                }
+            }
+        }
+    }
+
+    private static class InsufficientAccountBalanceException extends RuntimeException {
+    }
+
+    static class AccountAlreadyExistsException extends RuntimeException {
     }
 }

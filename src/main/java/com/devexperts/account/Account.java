@@ -1,35 +1,23 @@
 package com.devexperts.account;
 
+import lombok.*;
+
+@Builder
+@Getter
+@ToString
 public class Account {
-    private final AccountKey accountKey;
-    private final String firstName;
-    private final String lastName;
+    private AccountKey accountKey;
+    private String firstName;
+    private String lastName;
+    @Setter
     private Double balance;
 
-    public Account(AccountKey accountKey, String firstName, String lastName, Double balance) {
-        this.accountKey = accountKey;
-        this.firstName = firstName;
-        this.lastName = lastName;
-        this.balance = balance;
+    public void debit(double amount) {
+        balance -= amount;
     }
 
-    public AccountKey getAccountKey() {
-        return accountKey;
+    public void credit(double amount) {
+        balance += amount;
     }
 
-    public String getFirstName() {
-        return firstName;
-    }
-
-    public String getLastName() {
-        return lastName;
-    }
-
-    public Double getBalance() {
-        return balance;
-    }
-
-    public void setBalance(Double balance) {
-        this.balance = balance;
-    }
 }
